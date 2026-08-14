@@ -1,0 +1,11 @@
+{
+  "name": "Stealth Panic Button",
+  "description": "Personal safety and emergency dispatch PWA disguised as a functional weather app with silent SOS triggers, duress lock screen, and SAPS 10111 integration.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
