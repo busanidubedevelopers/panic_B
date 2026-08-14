@@ -9,6 +9,7 @@ interface SettingsModalProps {
   onSave: (config: UserConfig) => void;
   onClose: () => void;
   onResetApp: () => void;
+  onOpenTutorial?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -16,6 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave,
   onClose,
   onResetApp,
+  onOpenTutorial,
 }) => {
   const [formData, setFormData] = useState<UserConfig>({ ...userConfig });
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -211,14 +213,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 flex items-center justify-between border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onResetApp}
-              className="text-xs text-rose-400 hover:text-rose-300 hover:underline"
-            >
-              Reset All / Re-run Onboarding
-            </button>
+          <div className="pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onResetApp}
+                className="text-xs text-rose-400 hover:text-rose-300 hover:underline"
+              >
+                Reset App
+              </button>
+              {onOpenTutorial && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenTutorial();
+                  }}
+                  className="text-xs text-sky-400 hover:text-sky-300 hover:underline"
+                >
+                  View Tutorial Walkthrough
+                </button>
+              )}
+            </div>
 
             <div className="flex gap-2">
               <button

@@ -97,5 +97,5 @@ export interface WeatherCondition {
   }>;
 }
 
-export type ActiveView = 'onboarding' | 'weather' | 'dashboard' | 'lockdown' | 'responder_tracking';
+export type ActiveView = 'onboarding' | 'tutorial' | 'weather' | 'dashboard' | 'lockdown' | 'responder';
 

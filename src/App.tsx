@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserConfig, LocationData, EmergencyState, ActiveView, BeaconLog, DeviceTelemetry, SafetyTimer } from './types';
 import { OnboardingView } from './components/OnboardingView';
+import { TutorialGuideView } from './components/TutorialGuideView';
 import { WeatherDisguiseView } from './components/WeatherDisguiseView';
 import { SecurityDashboardView } from './components/SecurityDashboardView';
 import { LockdownView } from './components/LockdownView';
@@ -359,11 +360,17 @@ export default function App() {
     return false;
   };
 
-  // Onboarding Complete Handler
+  // Onboarding Complete Handler - transitions to How-To-Use Tutorial layer
   const handleOnboardingComplete = (newConfig: UserConfig) => {
     setUserConfig(newConfig);
+    setActiveView('tutorial');
+    addBeaconLog('Profile setup complete. Calibration walkthrough launched.', 'info');
+  };
+
+  // Proceed from Tutorial to Disguise Weather Main Screen
+  const handleProceedFromTutorialToWeather = () => {
     setActiveView('weather');
-    addBeaconLog('Profile setup complete. Disguise Weather camouflage armed.', 'info');
+    addBeaconLog('Calibration complete. Disguise Weather camouflage armed.', 'info');
   };
 
   // Logout / Return to Onboarding Handler
@@ -406,7 +413,16 @@ export default function App() {
         />
       )}
 
-      {/* View 2: Camouflage Weather Disguise UI */}
+      {/* View 2: How To Use App Walkthrough Layer (After Setup/Login) */}
+      {activeView === 'tutorial' && (
+        <TutorialGuideView
+          userConfig={userConfig}
+          currentLocation={currentLocation}
+          onProceedToWeather={handleProceedFromTutorialToWeather}
+        />
+      )}
+
+      {/* View 3: Camouflage Weather Disguise UI */}
       {activeView === 'weather' && (
         <WeatherDisguiseView
           userConfig={userConfig}
@@ -421,10 +437,11 @@ export default function App() {
           onLogout={handleLogout}
           onOpenSettings={() => setShowSettings(true)}
           onOpenResponderPortal={() => setActiveView('responder')}
+          onOpenTutorial={() => setActiveView('tutorial')}
         />
       )}
 
-      {/* View 3: Security SOS Command Center Dashboard UI */}
+      {/* View 4: Security SOS Command Center Dashboard UI */}
       {activeView === 'dashboard' && (
         <SecurityDashboardView
           userConfig={userConfig}
@@ -443,7 +460,7 @@ export default function App() {
         />
       )}
 
-      {/* View 4: Fake 503 Lockdown Error UI */}
+      {/* View 5: Fake 503 Lockdown Error UI */}
       {activeView === 'lockdown' && (
         <LockdownView
           userConfig={userConfig}
@@ -454,7 +471,7 @@ export default function App() {
         />
       )}
 
-      {/* View 5: Live Responder CAD Portal */}
+      {/* View 6: Live Responder CAD Portal */}
       {activeView === 'responder' && (
         <ResponderTrackingView
           userConfig={userConfig}
@@ -472,6 +489,7 @@ export default function App() {
           onSave={(updated) => setUserConfig(updated)}
           onClose={() => setShowSettings(false)}
           onResetApp={handleResetApp}
+          onOpenTutorial={() => setActiveView('tutorial')}
         />
       )}
 

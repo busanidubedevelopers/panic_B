@@ -41,6 +41,7 @@ interface WeatherDisguiseViewProps {
   onLogout?: () => void;
   onOpenSettings: () => void;
   onOpenResponderPortal?: () => void;
+  onOpenTutorial?: () => void;
 }
 
 export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
@@ -56,6 +57,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
   onLogout,
   onOpenSettings,
   onOpenResponderPortal,
+  onOpenTutorial,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentWeather, setCurrentWeather] = useState<WeatherCondition>(
@@ -78,6 +80,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
   const [showDiscreetKeypad, setShowDiscreetKeypad] = useState(false);
   const [keypadPin, setKeypadPin] = useState('');
   const [showDemoGuide, setShowDemoGuide] = useState(false);
+  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
 
   // Update live clock
   useEffect(() => {
@@ -761,9 +764,104 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
         </div>
       )}
 
+      {/* Discreet Diagnostics Modal (Fake Engine Diagnostics Cheat-Sheet) */}
+      {showDiagnosticsModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-lg w-full text-left space-y-4 shadow-2xl animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">
+                  Atmosphere Engine Diagnostics (v3.4.1-rc2)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiagnosticsModal(false)}
+                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-slate-900 border border-slate-800"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">System Telemetry:</span>
+                <span className="text-emerald-400 font-mono font-semibold">ONLINE • All Sensors Calibrated</span>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <div className="text-[11px] font-mono font-semibold uppercase text-sky-400 tracking-wider">
+                  COMMAND CHEAT-SHEET (Operational Protocols)
+                </div>
+
+                <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-2 font-mono text-[11px]">
+                  <div>
+                    <span className="text-sky-300 font-bold block">• Diagnostic Console Entry (Master Vault):</span>
+                    <span className="text-slate-400">
+                      Input your 4-digit key (<strong className="text-emerald-300">{userConfig.accessPin}</strong>) into the City Search bar and press Enter/Search.
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-rose-400 font-bold block">• Forced Decoy Protocol (Duress Lockout):</span>
+                    <span className="text-slate-400">
+                      Enter your 4-digit Duress Key (<strong className="text-rose-300">{userConfig.duressPin}</strong>) in the Search bar to render a realistic 503 Service Outage screen while maintaining silent GPS beaconing.
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-teal-300 font-bold block">• Rapid Barometric Beacon (Silent Panic Trigger):</span>
+                    <span className="text-slate-400">
+                      Tap the 'Wind Speed' metric card on the dashboard, or hold the 'Atmosphere' top bar for 3 seconds.
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-indigo-300 font-bold block">• Motion Telemetry Sensor (Pocket Shake):</span>
+                    <span className="text-slate-400">
+                      Rapidly shake device 3 times to initiate silent emergency dispatch loop.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-800/80">
+                {onOpenTutorial && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDiagnosticsModal(false);
+                      onOpenTutorial();
+                    }}
+                    className="w-full sm:w-auto px-3 py-2 rounded-xl bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/40 text-xs font-medium transition-colors"
+                  >
+                    Launch Interactive Onboarding Walkthrough →
+                  </button>
+                )}
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Station Latency: 24ms | GPS: Verified
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Footer Discreet Camouflage Status */}
       <footer className="text-center text-xs text-sky-200/50 px-4 mt-auto">
-        <span>Atmosphere Engine v3.4 • South African Weather Service Radar Active</span>
+        <button
+          type="button"
+          id="btn-open-diagnostics-footer"
+          onClick={() => {
+            triggerHaptic(HAPTIC_PATTERNS.tap);
+            setShowDiagnosticsModal(true);
+          }}
+          className="hover:text-sky-200 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+          title="Click to view Atmosphere Engine Diagnostics"
+        >
+          <span>Atmosphere Engine v3.4 • South African Weather Service Radar Active</span>
+        </button>
       </footer>
     </div>
   );
