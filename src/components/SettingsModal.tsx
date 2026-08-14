@@ -178,6 +178,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {/* Home Screen Icon & Camouflage Guide */}
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+            <div className="flex items-center gap-2.5">
+              <img
+                src="icon.jpg"
+                alt="Atmosphere App Icon"
+                className="w-12 h-12 rounded-2xl border border-sky-400/30 shadow-md object-cover shrink-0"
+                referrerPolicy="no-referrer"
+              />
+              <div className="space-y-0.5">
+                <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                  <span>"Atmosphere" Home Screen Icon</span>
+                  <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[10px] font-mono">PWA Active</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Installs as a genuine Weather app icon on your phone home screen.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300 pt-1 border-t border-slate-900">
+              <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800 space-y-1">
+                <span className="font-bold text-sky-300 block">iOS (iPhone Safari):</span>
+                <span>Tap <strong>Share ⎋</strong> → scroll down → tap <strong>"Add to Home Screen"</strong>.</span>
+              </div>
+              <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800 space-y-1">
+                <span className="font-bold text-emerald-300 block">Android (Chrome):</span>
+                <span>Tap <strong>Menu ⋮</strong> → tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>.</span>
+              </div>
+            </div>
+          </div>
+
           {/* Action Buttons */}
           <div className="pt-4 flex items-center justify-between border-t border-slate-800">
             <button

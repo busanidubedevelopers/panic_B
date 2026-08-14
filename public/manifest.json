@@ -1,0 +1,24 @@
+{
+  "short_name": "Atmosphere",
+  "name": "Atmosphere • Live Weather & Radar",
+  "description": "Hyperlocal live weather forecast, precipitation radar, and meteorological tracking.",
+  "icons": [
+    {
+      "src": "icon.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.jpg",
+      "sizes": "180x180",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0c4a6e",
+  "background_color": "#0f172a"
+}
