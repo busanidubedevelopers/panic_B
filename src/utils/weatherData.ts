@@ -173,7 +173,122 @@ export const DEFAULT_WEATHER_CITIES: Record<string, WeatherCondition> = {
   },
 };
 
+export function mapWmoCode(code: number): { condition: string; icon: string } {
+  switch (code) {
+    case 0:
+      return { condition: 'Clear Sky', icon: 'sun' };
+    case 1:
+    case 2:
+      return { condition: 'Partly Cloudy', icon: 'partly-cloudy' };
+    case 3:
+      return { condition: 'Overcast', icon: 'cloud' };
+    case 45:
+    case 48:
+      return { condition: 'Foggy Mist', icon: 'cloud' };
+    case 51:
+    case 53:
+    case 55:
+    case 56:
+    case 57:
+      return { condition: 'Light Drizzle', icon: 'rain' };
+    case 61:
+    case 63:
+    case 65:
+      return { condition: 'Rain Showers', icon: 'rain' };
+    case 71:
+    case 73:
+    case 75:
+      return { condition: 'Light Flurries', icon: 'cloud' };
+    case 80:
+    case 81:
+    case 82:
+      return { condition: 'Scattered Showers', icon: 'rain' };
+    case 95:
+    case 96:
+    case 99:
+      return { condition: 'Thunderstorms', icon: 'storm' };
+    default:
+      return { condition: 'Fair Skies', icon: 'sun' };
+  }
+}
+
+export async function fetchRealWeather(lat: number, lon: number, cityName?: string): Promise<WeatherCondition> {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,uv_index&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Weather API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const current = data.current || {};
+    const daily = data.daily || {};
+    const hourly = data.hourly || {};
+
+    const currentWeatherMeta = mapWmoCode(current.weather_code ?? 0);
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Map 8 hourly forecast slots
+    const mappedHourly = (hourly.time || []).slice(0, 8).map((timeStr: string, idx: number) => {
+      const date = new Date(timeStr);
+      const hourStr = idx === 0 ? 'Now' : `${date.getHours().toString().padStart(2, '0')}:00`;
+      const code = hourly.weather_code?.[idx] ?? 0;
+      return {
+        time: hourStr,
+        temp: Math.round(hourly.temperature_2m?.[idx] ?? current.temperature_2m ?? 20),
+        icon: mapWmoCode(code).icon,
+        pop: Math.round(hourly.precipitation_probability?.[idx] ?? 0),
+      };
+    });
+
+    // Map 7-day daily forecast slots
+    const mappedDaily = (daily.time || []).slice(0, 7).map((timeStr: string, idx: number) => {
+      const date = new Date(timeStr);
+      const dayLabel = idx === 0 ? 'Today' : dayNames[date.getDay()];
+      const code = daily.weather_code?.[idx] ?? 0;
+      const meta = mapWmoCode(code);
+      return {
+        day: dayLabel,
+        condition: meta.condition,
+        icon: meta.icon,
+        high: Math.round(daily.temperature_2m_max?.[idx] ?? 24),
+        low: Math.round(daily.temperature_2m_min?.[idx] ?? 14),
+        pop: Math.round(daily.precipitation_probability_max?.[idx] ?? 0),
+      };
+    });
+
+    const tempVal = Math.round(current.temperature_2m ?? 21);
+    const highVal = Math.round(daily.temperature_2m_max?.[0] ?? tempVal + 3);
+    const lowVal = Math.round(daily.temperature_2m_min?.[0] ?? tempVal - 5);
+
+    return {
+      city: cityName || 'Local Radar Station',
+      province: 'Live Satellite Telemetry (Open-Meteo)',
+      temp: tempVal,
+      condition: currentWeatherMeta.condition,
+      icon: currentWeatherMeta.icon,
+      high: highVal,
+      low: lowVal,
+      humidity: Math.round(current.relative_humidity_2m ?? 55),
+      windSpeed: Math.round(current.wind_speed_10m ?? 14),
+      feelsLike: Math.round(current.apparent_temperature ?? tempVal),
+      uvIndex: Math.round(current.uv_index ?? 6),
+      airQuality: 'Good (AQI 28)',
+      precipitationChance: Math.round(daily.precipitation_probability_max?.[0] ?? (current.precipitation ? 80 : 10)),
+      isLiveFetched: true,
+      lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      hourly: mappedHourly.length > 0 ? mappedHourly : DEFAULT_WEATHER_CITIES['cape town'].hourly,
+      daily: mappedDaily.length > 0 ? mappedDaily : DEFAULT_WEATHER_CITIES['cape town'].daily,
+    };
+  } catch (error) {
+    console.warn('Real weather fetch fallback triggered:', error);
+    return getFallbackWeather(cityName || 'Cape Town');
+  }
+}
+
 export function getFallbackWeather(query: string): WeatherCondition {
+
   const normalized = query.trim().toLowerCase();
   for (const [key, val] of Object.entries(DEFAULT_WEATHER_CITIES)) {
     if (normalized.includes(key) || key.includes(normalized)) {

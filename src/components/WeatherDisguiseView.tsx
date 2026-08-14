@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserConfig, WeatherCondition, LocationData } from '../types';
-import { DEFAULT_WEATHER_CITIES, getFallbackWeather } from '../utils/weatherData';
+import { UserConfig, WeatherCondition, LocationData, DeviceTelemetry, SafetyTimer } from '../types';
+import { DEFAULT_WEATHER_CITIES, getFallbackWeather, fetchRealWeather } from '../utils/weatherData';
 import {
   Search,
   Cloud,
@@ -19,6 +19,11 @@ import {
   Sunrise,
   Sunset,
   VolumeX,
+  Battery,
+  BatteryCharging,
+  Smartphone,
+  Footprints,
+  Sparkles,
 } from 'lucide-react';
 import { triggerHaptic, HAPTIC_PATTERNS } from '../utils/haptics';
 import { soundEngine } from '../utils/sound';
@@ -26,32 +31,42 @@ import { soundEngine } from '../utils/sound';
 interface WeatherDisguiseViewProps {
   userConfig: UserConfig;
   currentLocation: LocationData | null;
+  telemetry?: DeviceTelemetry;
+  safetyTimer?: SafetyTimer;
   onUnlockDashboard: () => void;
   onTriggerDuressLockdown: () => void;
   onTriggerStealthSOS: () => void;
   onTriggerWindSpeedPanic: () => void;
+  onTriggerShakeSOS?: () => void;
   onLogout?: () => void;
   onOpenSettings: () => void;
+  onOpenResponderPortal?: () => void;
 }
 
 export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
   userConfig,
   currentLocation,
+  telemetry,
+  safetyTimer,
   onUnlockDashboard,
   onTriggerDuressLockdown,
   onTriggerStealthSOS,
   onTriggerWindSpeedPanic,
+  onTriggerShakeSOS,
   onLogout,
   onOpenSettings,
+  onOpenResponderPortal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentWeather, setCurrentWeather] = useState<WeatherCondition>(
     DEFAULT_WEATHER_CITIES['cape town']
   );
   const [isSearching, setIsSearching] = useState(false);
+  const [isLiveFetching, setIsLiveFetching] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [windSpeedTapPulse, setWindSpeedTapPulse] = useState(false);
   const [airQualityTapPulse, setAirQualityTapPulse] = useState(false);
+  const [shakeSimPulse, setShakeSimPulse] = useState(false);
 
   // Stealth Header Hold gesture tracking
   const [headerHoldProgress, setHeaderHoldProgress] = useState(0);
@@ -76,6 +91,29 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
     const interval = setInterval(updateTime, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch real Open-Meteo weather when location updates
+  useEffect(() => {
+    let isCancelled = false;
+    if (currentLocation?.latitude && currentLocation?.longitude) {
+      setIsLiveFetching(true);
+      fetchRealWeather(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        currentLocation.isFallback ? 'Cape Town' : 'Live Station'
+      ).then((data) => {
+        if (!isCancelled) {
+          setCurrentWeather(data);
+          setIsLiveFetching(false);
+        }
+      }).catch(() => {
+        if (!isCancelled) setIsLiveFetching(false);
+      });
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentLocation?.latitude, currentLocation?.longitude, currentLocation?.isFallback]);
 
   // Check search bar inputs for PIN triggers
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,6 +252,18 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
     }, 300);
   };
 
+  // Shake trigger simulator
+  const handleSimulateShake = () => {
+    setShakeSimPulse(true);
+    triggerHaptic(HAPTIC_PATTERNS.emergencyLoop);
+    if (onTriggerShakeSOS) {
+      onTriggerShakeSOS();
+    } else {
+      onTriggerStealthSOS();
+    }
+    setTimeout(() => setShakeSimPulse(false), 1200);
+  };
+
   const getWeatherIcon = (iconName: string, className = 'w-8 h-8') => {
     switch (iconName) {
       case 'sun':
@@ -232,6 +282,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
         return <Sun className={`${className} text-amber-400`} />;
     }
   };
+
 
   return (
     <div id="weather-ui" className="min-h-screen bg-gradient-to-b from-sky-900 via-slate-900 to-slate-950 text-white flex flex-col justify-between pb-10">
@@ -259,14 +310,15 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
           )}
 
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div className={`w-2.5 h-2.5 rounded-full ${isLiveFetching ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`} />
             <div className="text-left">
               <div className="flex items-center gap-1.5">
                 <span className="font-bold tracking-tight text-lg text-white">
                   {currentWeather.city}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-sky-200 font-medium">
-                  Live
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-sky-200 font-medium flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                  {isLiveFetching ? 'Fetching Live...' : 'Open-Meteo Live'}
                 </span>
               </div>
               <p className="text-[11px] text-sky-200/70 font-light truncate max-w-[200px]">
@@ -275,7 +327,13 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {telemetry && (
+              <div className="hidden sm:flex items-center gap-1 text-xs text-sky-200/80 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
+                {telemetry.isCharging ? <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" /> : <Battery className="w-3.5 h-3.5 text-sky-300" />}
+                <span className="font-mono text-[11px]">{telemetry.batteryLevel ?? 92}%</span>
+              </div>
+            )}
             <span className="text-sm font-mono text-sky-100 font-medium">
               {currentTime}
             </span>
@@ -294,6 +352,20 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Active Safety Escort Banner (if armed in background) */}
+        {safetyTimer?.isActive && (
+          <div className="mt-2.5 px-3.5 py-2 rounded-xl bg-emerald-950/80 border border-emerald-500/50 flex items-center justify-between text-xs backdrop-blur-md animate-pulse">
+            <div className="flex items-center gap-2 text-emerald-200">
+              <Footprints className="w-4 h-4 text-emerald-400" />
+              <span className="font-medium">Safety Escort Armed: {safetyTimer.label}</span>
+            </div>
+            <span className="font-mono font-bold text-emerald-300">
+              {Math.floor(safetyTimer.remainingSeconds / 60).toString().padStart(2, '0')}:
+              {(safetyTimer.remainingSeconds % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+        )}
 
         {/* Search Bar - Intercepts Access PIN & Duress PIN */}
         <form onSubmit={handleSearchSubmit} className="mt-3 relative">
@@ -327,7 +399,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
             <div className="flex items-center justify-between font-semibold text-sky-300">
               <span className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Stealth Testing & Security Actions
+                Stealth Testing & Prototype Trigger Hub
               </span>
               <button
                 onClick={() => setShowDemoGuide(false)}
@@ -338,10 +410,10 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
             </div>
             
             <p className="text-slate-300 leading-relaxed">
-              This app looks 100% like a genuine Weather App to protect you under surveillance. Test any trigger below or type into the search bar:
+              This app looks 100% like a genuine Weather App to protect you under surveillance. Test any prototype trigger below:
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
               <button
                 type="button"
                 id="quick-safe-pin-btn"
@@ -356,7 +428,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
                   <span>Safe Access</span>
                   <span className="font-mono bg-emerald-900/80 px-1.5 py-0.5 rounded text-[10px]">{userConfig.accessPin}</span>
                 </div>
-                <div className="text-[11px] text-emerald-400/80 mt-0.5">Unlocks SOS Command Hub</div>
+                <div className="text-[11px] text-emerald-400/80 mt-0.5">SOS Command Hub</div>
               </button>
 
               <button
@@ -372,7 +444,23 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
                   <span>Duress PIN</span>
                   <span className="font-mono bg-rose-950 px-1.5 py-0.5 rounded text-[10px]">{userConfig.duressPin}</span>
                 </div>
-                <div className="text-[11px] text-rose-400/80 mt-0.5">Fake 503 Crash + Silent SOS</div>
+                <div className="text-[11px] text-rose-400/80 mt-0.5">Fake 503 + SOS</div>
+              </button>
+
+              <button
+                type="button"
+                id="quick-shake-panic-btn"
+                onClick={handleSimulateShake}
+                className="p-2 rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 text-left transition-colors cursor-pointer"
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Smartphone className="w-3 h-3 text-indigo-400" />
+                    Shake Test
+                  </span>
+                  <span className="font-mono bg-indigo-900/80 px-1.5 py-0.5 rounded text-[10px]">Motion</span>
+                </div>
+                <div className="text-[11px] text-indigo-300/80 mt-0.5">Shake Phone SOS</div>
               </button>
 
               <button
@@ -388,7 +476,7 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
                   <span>Stealth Header</span>
                   <span className="font-mono bg-amber-900/80 px-1.5 py-0.5 rounded text-[10px]">Hold 3s</span>
                 </div>
-                <div className="text-[11px] text-amber-400/80 mt-0.5">Silent Background Alarm</div>
+                <div className="text-[11px] text-amber-400/80 mt-0.5">Silent Alarm</div>
               </button>
 
               <button
@@ -408,25 +496,36 @@ export const WeatherDisguiseView: React.FC<WeatherDisguiseViewProps> = ({
                 type="button"
                 id="quick-airquality-tap-btn"
                 onClick={handleAirQualityTap}
-                className="p-2 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 text-left transition-colors cursor-pointer col-span-2 sm:col-span-1"
+                className="p-2 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 text-left transition-colors cursor-pointer"
               >
                 <div className="font-bold flex items-center justify-between">
                   <span>Air Quality</span>
-                  <span className="font-mono bg-cyan-900/80 px-1.5 py-0.5 rounded text-[10px]">Logout</span>
+                  <span className="font-mono bg-cyan-900/80 px-1.5 py-0.5 rounded text-[10px]">Exit</span>
                 </div>
-                <div className="text-[11px] text-cyan-400/80 mt-0.5">Stealth Logout / Exit</div>
+                <div className="text-[11px] text-cyan-400/80 mt-0.5">Stealth Logout</div>
               </button>
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px] text-slate-400">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800 text-[11px] text-slate-400">
               <span>ICE: {userConfig.iceContactName} ({userConfig.iceContactPhone})</span>
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="text-sky-400 hover:underline"
-              >
-                Edit PINs & Contacts
-              </button>
+              <div className="flex items-center gap-3">
+                {onOpenResponderPortal && (
+                  <button
+                    type="button"
+                    onClick={onOpenResponderPortal}
+                    className="text-sky-400 hover:underline font-medium cursor-pointer"
+                  >
+                    View Responder CAD Portal →
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="text-slate-300 hover:underline cursor-pointer"
+                >
+                  Edit PINs
+                </button>
+              </div>
             </div>
           </div>
         )}

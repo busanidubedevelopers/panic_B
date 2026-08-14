@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserConfig, LocationData, EmergencyState } from '../types';
+import { UserConfig, LocationData, EmergencyState, DeviceTelemetry, SafetyTimer } from '../types';
 import { GeofencingMap } from './GeofencingMap';
 import { AudioEvidenceRecorder } from './AudioEvidenceRecorder';
+import { SafetyEscortTimer } from './SafetyEscortTimer';
 import {
   ShieldAlert,
   AlertTriangle,
@@ -21,6 +22,10 @@ import {
   ExternalLink,
   Shield,
   Siren,
+  Battery,
+  BatteryCharging,
+  Smartphone,
+  Share2,
 } from 'lucide-react';
 import { triggerHaptic, HAPTIC_PATTERNS } from '../utils/haptics';
 import { soundEngine } from '../utils/sound';
@@ -29,22 +34,32 @@ interface SecurityDashboardViewProps {
   userConfig: UserConfig;
   currentLocation: LocationData | null;
   emergencyState: EmergencyState;
-  onTriggerActiveSOS: () => void;
+  telemetry: DeviceTelemetry;
+  safetyTimer: SafetyTimer;
+  onTriggerActiveSOS: (triggerType?: string) => void;
   onCancelEmergency: (pin: string) => boolean;
   onRefreshLocation: () => void;
   onReturnToDisguise: () => void;
   onOpenSettings: () => void;
+  onOpenResponderPortal: () => void;
+  onStartSafetyTimer: (minutes: number, label: string) => void;
+  onCancelSafetyTimer: (pin: string) => boolean;
 }
 
 export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
   userConfig,
   currentLocation,
   emergencyState,
+  telemetry,
+  safetyTimer,
   onTriggerActiveSOS,
   onCancelEmergency,
   onRefreshLocation,
   onReturnToDisguise,
   onOpenSettings,
+  onOpenResponderPortal,
+  onStartSafetyTimer,
+  onCancelSafetyTimer,
 }) => {
   // Main SOS Button Hold state
   const [sosHoldProgress, setSosHoldProgress] = useState(0);
@@ -95,7 +110,7 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
         setSosHoldProgress(0);
         triggerHaptic(HAPTIC_PATTERNS.armed);
         soundEngine.playArmedChirp();
-        onTriggerActiveSOS();
+        onTriggerActiveSOS('dashboard_hold');
       }
     }, 40);
   };
@@ -139,7 +154,7 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
     <div id="sos-ui" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 space-y-6">
       
       {/* Top Header & Disguise Quick Switch */}
-      <header className="flex items-center justify-between border-b border-slate-800 pb-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
             <ShieldAlert className="w-6 h-6" />
@@ -159,13 +174,29 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400">
-              Dispatched to {userConfig.sapsSector}
-            </p>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span>Dispatched to {userConfig.sapsSector}</span>
+              <span>•</span>
+              <span className="text-slate-300 flex items-center gap-1 font-mono">
+                {telemetry.isCharging ? <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" /> : <Battery className="w-3.5 h-3.5 text-slate-400" />}
+                {telemetry.batteryLevel ?? 88}%
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            id="btn-open-responder-portal"
+            onClick={onOpenResponderPortal}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-sky-500/40 text-xs text-sky-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Open Responder Live Tracking Portal"
+          >
+            <Share2 className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Live Responder</span> CAD Portal
+          </button>
+
           <button
             type="button"
             id="btn-return-disguise"
@@ -190,7 +221,7 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
                   LIVE EMERGENCY DISPATCH PROTOCOL TRIGGERED
                 </div>
                 <div className="text-xs text-rose-300/80">
-                  Trigger: {emergencyState.triggerType === 'windspeed_tap' ? 'WINDSPEED METRIC TAP' : emergencyState.triggerType?.replace(/_/g, ' ').toUpperCase()} • Lat/Long tracking active
+                  Trigger: {emergencyState.triggerType === 'windspeed_tap' ? 'WINDSPEED METRIC TAP' : emergencyState.triggerType === 'shake_motion' ? 'POCKET SHAKE SENSOR' : emergencyState.triggerType === 'dead_man_timer' ? 'SAFETY ESCORT TIMER EXPIRED' : emergencyState.triggerType?.replace(/_/g, ' ').toUpperCase()} • Lat/Long tracking active
                 </div>
               </div>
             </div>
@@ -297,6 +328,15 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
         </p>
       </div>
 
+      {/* "Walk With Me" Safety Escort Dead Man's Switch */}
+      <SafetyEscortTimer
+        safetyTimer={safetyTimer}
+        accessPin={userConfig.accessPin}
+        onStartTimer={onStartSafetyTimer}
+        onCancelTimer={onCancelSafetyTimer}
+        onTimerExpired={() => onTriggerActiveSOS('dead_man_timer')}
+      />
+
       {/* Grid: Tactical Geofencing & Audio Evidence Recorder */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <GeofencingMap
@@ -306,6 +346,7 @@ export const SecurityDashboardView: React.FC<SecurityDashboardViewProps> = ({
         />
         <AudioEvidenceRecorder
           isEmergencyActive={emergencyState.isActive}
+          gpsCoords={{ latitude: currentLocation?.latitude ?? null, longitude: currentLocation?.longitude ?? null }}
         />
       </div>
 

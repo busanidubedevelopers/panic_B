@@ -4,14 +4,16 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { UserConfig, LocationData, EmergencyState, ActiveView, BeaconLog } from './types';
+import { UserConfig, LocationData, EmergencyState, ActiveView, BeaconLog, DeviceTelemetry, SafetyTimer } from './types';
 import { OnboardingView } from './components/OnboardingView';
 import { WeatherDisguiseView } from './components/WeatherDisguiseView';
 import { SecurityDashboardView } from './components/SecurityDashboardView';
 import { LockdownView } from './components/LockdownView';
+import { ResponderTrackingView } from './components/ResponderTrackingView';
 import { SettingsModal } from './components/SettingsModal';
 import { triggerHaptic, HAPTIC_PATTERNS } from './utils/haptics';
 import { soundEngine } from './utils/sound';
+import { getDeviceBattery, globalShakeDetector } from './utils/deviceSensors';
 
 const STORAGE_KEY = 'stealth_panic_app_config_v1';
 
@@ -28,6 +30,7 @@ const DEFAULT_CONFIG: UserConfig = {
   enableAudioRecording: true,
   enableHaptics: true,
   enableSirens: true,
+  enableShakeToPanic: true,
   isSetupComplete: false,
 };
 
@@ -54,7 +57,26 @@ export default function App() {
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
   const geoWatchIdRef = useRef<number | null>(null);
 
-  // 4. Emergency State
+  // 4. Device Telemetry (Battery & Motion)
+  const [telemetry, setTelemetry] = useState<DeviceTelemetry>({
+    batteryLevel: 88,
+    isCharging: false,
+    motionSupported: true,
+    shakeArmed: true,
+    networkOnline: true,
+  });
+
+  // 5. "Walk With Me" Safety Escort Dead Man's Switch Timer
+  const [safetyTimer, setSafetyTimer] = useState<SafetyTimer>({
+    isActive: false,
+    durationMinutes: 5,
+    remainingSeconds: 300,
+    startedAt: null,
+    targetTimestamp: null,
+    label: 'Walking to Car',
+  });
+
+  // 6. Emergency State
   const [emergencyState, setEmergencyState] = useState<EmergencyState>({
     isActive: false,
     triggerType: null,
@@ -69,7 +91,7 @@ export default function App() {
     beaconLogs: [],
   });
 
-  // 5. Settings Modal State
+  // 7. Settings Modal State
   const [showSettings, setShowSettings] = useState(false);
 
   // Save config to storage whenever it updates
@@ -99,6 +121,17 @@ export default function App() {
     []
   );
 
+  // Initialize Battery Hardware Telemetry
+  useEffect(() => {
+    getDeviceBattery().then((batt) => {
+      setTelemetry((prev) => ({
+        ...prev,
+        batteryLevel: batt.level,
+        isCharging: batt.isCharging,
+      }));
+    });
+  }, []);
+
   // Geolocation watch & acquisition
   const refreshLocation = useCallback(() => {
     if (typeof window !== 'undefined' && 'geolocation' in navigator) {
@@ -122,7 +155,6 @@ export default function App() {
         },
         (err) => {
           console.warn('Geolocation error:', err.message);
-          // Fallback to Cape Town default coordinates
           const fallbackLoc: LocationData = {
             latitude: -33.9249,
             longitude: 18.4241,
@@ -170,20 +202,20 @@ export default function App() {
     };
   }, [refreshLocation, userConfig.sapsSector]);
 
-  // Trigger 1: Active 2-Second Hold from Security Dashboard
-  const handleTriggerActiveSOS = () => {
+  // Trigger 1: Active Hold from Security Dashboard
+  const handleTriggerActiveSOS = (triggerType: string = 'active_hold') => {
     if (emergencyState.isActive) return;
 
     setEmergencyState((prev) => ({
       ...prev,
       isActive: true,
-      triggerType: 'active_hold',
+      triggerType: triggerType as any,
       startedAt: Date.now(),
       isSilent: false,
       isAudioRecording: true,
     }));
 
-    addBeaconLog('CRITICAL: Active 2-Second SOS Button Triggered. Full dispatch engaged.', 'danger');
+    addBeaconLog(`CRITICAL: Emergency Alarm Triggered (${triggerType.toUpperCase()}). Full dispatch engaged.`, 'danger');
     triggerHaptic(HAPTIC_PATTERNS.emergencyLoop);
   };
 
@@ -199,7 +231,6 @@ export default function App() {
     }));
 
     addBeaconLog('STEALTH: Weather Header 3-second hold detected. Silent background beacon active.', 'alert');
-    // Silent vibration pulse only
     triggerHaptic(HAPTIC_PATTERNS.stealthTrigger);
   };
 
@@ -238,6 +269,76 @@ export default function App() {
     if (userConfig.enableSirens) {
       soundEngine.playArmedChirp();
     }
+  };
+
+  // Trigger 5: Hardware Shake Gesture Trigger
+  const handleTriggerShakeSOS = useCallback(() => {
+    if (emergencyState.isActive) return;
+
+    setTelemetry((prev) => ({ ...prev, shakeArmed: false }));
+    setEmergencyState((prev) => ({
+      ...prev,
+      isActive: true,
+      triggerType: 'shake_motion',
+      startedAt: Date.now(),
+      isSilent: true,
+      isAudioRecording: true,
+    }));
+
+    addBeaconLog('MOTION SENSOR: Rapid pocket shake detected. Silent background panic beacon engaged.', 'danger');
+    triggerHaptic(HAPTIC_PATTERNS.emergencyLoop);
+  }, [emergencyState.isActive, addBeaconLog]);
+
+  // Bind hardware Shake detector on mount
+  useEffect(() => {
+    globalShakeDetector.init(handleTriggerShakeSOS);
+    return () => {
+      globalShakeDetector.stop();
+    };
+  }, [handleTriggerShakeSOS]);
+
+  // Safety Escort Countdown Tick Engine
+  useEffect(() => {
+    if (!safetyTimer.isActive) return;
+
+    const interval = setInterval(() => {
+      setSafetyTimer((prev) => {
+        if (!prev.isActive) return prev;
+        if (prev.remainingSeconds <= 1) {
+          // Timer expired! Trigger Dead Man's Panic
+          handleTriggerActiveSOS('dead_man_timer');
+          return { ...prev, isActive: false, remainingSeconds: 0 };
+        }
+        return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safetyTimer.isActive]);
+
+  const handleStartSafetyTimer = (minutes: number, label: string) => {
+    setSafetyTimer({
+      isActive: true,
+      durationMinutes: minutes,
+      remainingSeconds: minutes * 60,
+      startedAt: Date.now(),
+      label,
+    });
+    addBeaconLog(`SAFETY ESCORT: Countdown armed for ${minutes} min ("${label}"). Safe PIN required to cancel.`, 'info');
+  };
+
+  const handleCancelSafetyTimer = (pin: string): boolean => {
+    if (pin === userConfig.accessPin) {
+      setSafetyTimer((prev) => ({
+        ...prev,
+        isActive: false,
+      }));
+      addBeaconLog('SAFETY ESCORT: Cancelled countdown safely with Safe PIN.', 'info');
+      return true;
+    }
+    addBeaconLog('SAFETY ESCORT: Failed cancel attempt (Incorrect PIN).', 'alert');
+    return false;
   };
 
   // Safe Stand Down / Cancel Alarm (Requires Safe PIN)
@@ -310,12 +411,16 @@ export default function App() {
         <WeatherDisguiseView
           userConfig={userConfig}
           currentLocation={currentLocation}
+          telemetry={telemetry}
+          safetyTimer={safetyTimer}
           onUnlockDashboard={() => setActiveView('dashboard')}
           onTriggerDuressLockdown={handleTriggerDuressLockdown}
           onTriggerStealthSOS={handleTriggerStealthSOS}
           onTriggerWindSpeedPanic={handleTriggerWindSpeedPanic}
+          onTriggerShakeSOS={handleTriggerShakeSOS}
           onLogout={handleLogout}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenResponderPortal={() => setActiveView('responder')}
         />
       )}
 
@@ -325,11 +430,16 @@ export default function App() {
           userConfig={userConfig}
           currentLocation={currentLocation}
           emergencyState={emergencyState}
+          telemetry={telemetry}
+          safetyTimer={safetyTimer}
           onTriggerActiveSOS={handleTriggerActiveSOS}
           onCancelEmergency={handleCancelEmergency}
           onRefreshLocation={refreshLocation}
           onReturnToDisguise={() => setActiveView('weather')}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenResponderPortal={() => setActiveView('responder')}
+          onStartSafetyTimer={handleStartSafetyTimer}
+          onCancelSafetyTimer={handleCancelSafetyTimer}
         />
       )}
 
@@ -341,6 +451,17 @@ export default function App() {
           emergencyState={emergencyState}
           onCancelEmergency={handleCancelEmergency}
           onReturnToWeather={() => setActiveView('weather')}
+        />
+      )}
+
+      {/* View 5: Live Responder CAD Portal */}
+      {activeView === 'responder' && (
+        <ResponderTrackingView
+          userConfig={userConfig}
+          currentLocation={currentLocation}
+          emergencyState={emergencyState}
+          telemetry={telemetry}
+          onClose={() => setActiveView('dashboard')}
         />
       )}
 

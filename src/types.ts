@@ -11,7 +11,25 @@ export interface UserConfig {
   enableAudioRecording: boolean;
   enableHaptics: boolean;
   enableSirens: boolean;
+  enableShakeToPanic: boolean;
   isSetupComplete: boolean;
+}
+
+export interface DeviceTelemetry {
+  batteryLevel: number | null; // 0 - 100
+  isCharging: boolean | null;
+  motionSupported: boolean;
+  shakeArmed: boolean;
+  networkOnline: boolean;
+}
+
+export interface SafetyTimer {
+  isActive: boolean;
+  durationMinutes: number;
+  remainingSeconds: number;
+  startedAt: number | null;
+  targetTimestamp: number | null;
+  label: string;
 }
 
 export interface LocationData {
@@ -35,7 +53,7 @@ export interface BeaconLog {
 
 export interface EmergencyState {
   isActive: boolean;
-  triggerType: 'active_hold' | 'stealth_header_hold' | 'duress_pin' | 'test_drill' | 'windspeed_tap' | null;
+  triggerType: 'active_hold' | 'stealth_header_hold' | 'duress_pin' | 'test_drill' | 'windspeed_tap' | 'shake_motion' | 'dead_man_timer' | null;
   startedAt: number | null;
   audioRecordingSeconds: number;
   isAudioRecording: boolean;
@@ -61,6 +79,8 @@ export interface WeatherCondition {
   uvIndex: number;
   airQuality: string;
   precipitationChance: number;
+  isLiveFetched?: boolean;
+  lastUpdated?: string;
   hourly: Array<{
     time: string;
     temp: number;
@@ -77,4 +97,5 @@ export interface WeatherCondition {
   }>;
 }
 
-export type ActiveView = 'onboarding' | 'weather' | 'dashboard' | 'lockdown';
+export type ActiveView = 'onboarding' | 'weather' | 'dashboard' | 'lockdown' | 'responder_tracking';
+
